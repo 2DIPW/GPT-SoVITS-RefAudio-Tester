@@ -8,6 +8,9 @@ import shutil
 import librosa
 from tqdm import tqdm
 import random
+import logging
+
+logging.getLogger("PIL.Image").propagate = False
 
 language_v1_to_language_v2 = {
     "ZH": "中文",
@@ -50,7 +53,7 @@ def check_audio_duration(path):
         return False
 
 
-def remove_noncompliant_audio_from_list():
+def remove_noncompliant_audio_from_list():  # 从参考音频文件列表中清除长度不符合要求的音频
     print("Checking audio duration ...")
     global g_ref_list, g_ref_list_max_index
     new_ref_list = []
@@ -61,18 +64,18 @@ def remove_noncompliant_audio_from_list():
     g_ref_list_max_index = len(g_ref_list) - 1
 
 
-def load_ref_list_file(path):
+def load_ref_list_file(path):  # 加载参考音频列表文件
     global g_ref_list, g_ref_list_max_index
     with open(path, 'r', encoding="utf-8") as f:
         reader = csv.reader(f, delimiter='|')
         g_ref_list = list(reader)
-        if g_ref_folder:
-            for i in g_ref_list:
-                i[0] = os.path.join(g_ref_folder, os.path.basename(i[0]))
+        if g_ref_folder:  # 如果指定了参考文件目录参数，则拼接文件名
+            for _ in g_ref_list:
+                _[0] = os.path.join(g_ref_folder, os.path.basename(_[0]))
         g_ref_list_max_index = len(g_ref_list) - 1
 
 
-def get_weights_names():
+def get_weights_names():  # 获取模型列表
     SoVITS_names = []
     for name in os.listdir(SoVITS_weight_root):
         if name.endswith(".pth"): SoVITS_names.append("%s/%s" % (SoVITS_weight_root, name))
@@ -90,13 +93,13 @@ def custom_sort_key(s):
     return parts
 
 
-def refresh_model_list():
+def refresh_model_list():  # 刷新模型列表
     SoVITS_names, GPT_names = get_weights_names()
     return {"choices": SoVITS_names, "__type__": "update"}, {
         "choices": GPT_names, "__type__": "update"}
 
 
-def reload_data(index, batch):
+def reload_data(index, batch):  # 从index起始，由文件列表中加载一批数据
     global g_index
     g_index = index
     global g_batch
@@ -114,7 +117,7 @@ def reload_data(index, batch):
     return output
 
 
-def change_index(index, batch):
+def change_index(index, batch):  # 起始索引更改后，将新的一批数据填充进表格
     global g_index, g_batch, g_ref_audio_path_list
     g_ref_audio_path_list = []
     g_index, g_batch = index, batch
@@ -173,32 +176,40 @@ def change_index(index, batch):
     return output
 
 
-def previous_index(index, batch):
+def previous_index(index, batch):  # 上一批数据
     if (index - batch) >= 0:
         return index - batch, *change_index(index - batch, batch)
     else:
         return 0, *change_index(0, batch)
 
 
-def next_index(index, batch):
+def next_index(index, batch):  # 下一批数据
     if (index + batch) <= g_ref_list_max_index:
         return index + batch, *change_index(index + batch, batch)
     else:
         return index, *change_index(index, batch)
 
 
-def copy_proved_ref_audio(index, text, out_dir):
+def copy_proved_ref_audio(index, text, out_dir):  # 满意按钮点击
     os.makedirs(out_dir, exist_ok=True)
     filename = re.sub(r'[/\\:*?\"<>|]', '', text)  # 删除不能出现在文件名中的字符
-    shutil.copy2(g_ref_audio_path_list[int(index)], os.path.join(out_dir, filename+".wav"))
-    return {
-                "__type__": "update",
-                "value": "已复制!",
-                "interactive": False
-            }
+    try:
+        shutil.copy2(g_ref_audio_path_list[int(index)], os.path.join(out_dir, filename+".wav"))
+        return {
+                    "__type__": "update",
+                    "value": "已复制!",
+                    "interactive": False
+                }
+    except Exception as e:
+        print(e)
+        return {
+            "__type__": "update",
+            "value": "复制失败",
+            "interactive": True
+        }
 
 
-def generate_test_audio(test_text, language, how_to_cut, top_k, top_p, temp, *widgets):
+def generate_test_audio(test_text, language, how_to_cut, top_k, top_p, temp, *widgets):  # 生成试听音频
     output = []
     for _ in range(g_batch):
         r_audio = g_ref_audio_path_list[_]
@@ -210,7 +221,8 @@ def generate_test_audio(test_text, language, how_to_cut, top_k, top_p, temp, *wi
                                                        top_k, top_p, temp)
                 sample_rate, array = next(gen_audio)
                 output.append((sample_rate, array))
-            except OSError:
+            except OSError:  # 若音频长度不符合要求
+                print(f"Duration of {r_audio} is not compliant, skip")
                 output.append(None)
         else:
             output.append(None)
@@ -218,17 +230,17 @@ def generate_test_audio(test_text, language, how_to_cut, top_k, top_p, temp, *wi
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Process some integers.')
-    parser.add_argument('-l', '--list', type=str, default="ref.list", help='List of ref audio, default is ref.list')
-    parser.add_argument('-p', '--port', type=int, default=14285, help='Port of webui, default is 14285')
-    parser.add_argument('-f', '--folder', type=str, default=None,
-                        help='The directory of ref audio, if not specified, abs path in the list file will be used, default is None.')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--list', type=str, default="ref.list", help='List of ref audio files, default is ref.list')
+    parser.add_argument('-p', '--port', type=int, default=14285, help='Port of WebUI, default is 14285')
+    parser.add_argument('-f', '--folder', type=str, default="",
+                        help='The directory of ref audio files, if not specified, abs path in the list file will be used, default is None.')
     parser.add_argument('-b', '--batch', type=int, default=10,
-                        help='How many ref audio files will be processed once, default is 10')
+                        help='How many ref audio files will be processed at one time, default is 10')
     parser.add_argument('-cd', '--check_duration', action='store_true', default=False,
                         help='Whether to check if the duration of every ref audio is between 3 and 10 seconds.')
     parser.add_argument('-r', '--random_order', action='store_true', default=False,
-                        help='Whether to randomize the audio list.')
+                        help='Whether to randomize the ref audio list.')
 
     args = parser.parse_args()
 
@@ -237,34 +249,37 @@ if __name__ == "__main__":
     os.makedirs(SoVITS_weight_root, exist_ok=True)
     os.makedirs(GPT_weight_root, exist_ok=True)
 
-    g_ref_audio_widget_list = []
-    g_ref_audio_path_list = []
-    g_ref_text_widget_list = []
-    g_ref_lang_widget_list = []
-    g_test_audio_widget_list = []
-    g_save_widget_list = []
+    g_ref_audio_widget_list = []  # 参考音频播放控件列表
+    g_ref_audio_path_list = []  # 当前批次参考音频地址列表
+    g_ref_lang_widget_list = []  # 参考语言控件列表
+    g_ref_text_widget_list = []  # 参考文本控件列表
+    g_test_audio_widget_list = []   # 试听音频播放控件列表
+    g_save_widget_list = []  # 满意按钮控件列表
 
-    g_ref_list = []
-    g_ref_list_max_index = 0
+    g_ref_list = []  # 参考音频文件列表
+    g_ref_list_max_index = 0  # 参考音频文件列表索引最大值
 
-    g_index = 0
+    g_index = 0  # 当前的索引
 
     g_ref_folder, g_batch = args.folder, args.batch
 
     load_ref_list_file(args.list)
 
     if args.check_duration:
-        remove_noncompliant_audio_from_list()
+        remove_noncompliant_audio_from_list()  # 检查音频长度功能
 
     if args.random_order:
-        random.shuffle(g_ref_list)
+        random.shuffle(g_ref_list)  # 检查音频顺序功能
 
     g_SoVITS_names, g_GPT_names = get_weights_names()
 
-    if g_GPT_names:
+    # 默认加载第一个模型
+    if g_GPT_names and g_SoVITS_names:
         inference_main.change_gpt_weights(g_GPT_names[0])
-    if g_SoVITS_names:
         inference_main.change_sovits_weights(g_SoVITS_names[0])
+    else:
+        print("No model found! Please put your model into SoVITS_weights and GPT_weights.")
+        exit()
 
     with gr.Blocks(title="GPT-SoVITS RefAudio Tester WebUI") as app:
         gr.Markdown(value="# GPT-SoVITS RefAudio Tester WebUI\nDeveloped by 2DIPW Licensed under GNU GPLv3 ❤ Open source leads the world to a brighter future!")
