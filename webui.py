@@ -5,6 +5,9 @@ import os
 import re
 import csv
 import shutil
+import librosa
+from tqdm import tqdm
+import random
 
 language_v1_to_language_v2 = {
     "ZH": "中文",
@@ -35,6 +38,29 @@ dict_how_to_cut = {
 }
 
 
+def check_audio_duration(path):
+    try:
+        wav16k, sr = librosa.load(path, sr=16000)
+        if wav16k.shape[0] > 160000 or wav16k.shape[0] < 48000:
+            return False
+        else:
+            return True
+    except Exception as e:
+        print(f"Error when checking audio {path}: {e}")
+        return False
+
+
+def remove_noncompliant_audio_from_list():
+    print("Checking audio duration ...")
+    global g_ref_list, g_ref_list_max_index
+    new_ref_list = []
+    for line in tqdm(g_ref_list):
+        if check_audio_duration(line[0]):
+           new_ref_list.append(line)
+    g_ref_list = new_ref_list
+    g_ref_list_max_index = len(g_ref_list) - 1
+
+
 def load_ref_list_file(path):
     global g_ref_list, g_ref_list_max_index
     with open(path, 'r', encoding="utf-8") as f:
@@ -42,7 +68,7 @@ def load_ref_list_file(path):
         g_ref_list = list(reader)
         if g_ref_folder:
             for i in g_ref_list:
-                i[0] = os.path.join(g_ref_folder, i[0])
+                i[0] = os.path.join(g_ref_folder, os.path.basename(i[0]))
         g_ref_list_max_index = len(g_ref_list) - 1
 
 
@@ -90,9 +116,11 @@ def reload_data(index, batch):
 
 def change_index(index, batch):
     global g_index, g_batch, g_ref_audio_path_list
+    g_ref_audio_path_list = []
     g_index, g_batch = index, batch
     datas = reload_data(index, batch)
     output = []
+    # 参考音频
     for i, _ in enumerate(datas):
         output.append(
             {
@@ -107,21 +135,25 @@ def change_index(index, batch):
             {
                 "__type__": "update",
                 "label": "参考音频",
-                "value": ""
+                "value": None
             }
         )
         g_ref_audio_path_list.append(None)
+    # 参考音频语言
     for _ in datas:
         output.append(_["lang"])
     for _ in range(g_batch - len(datas)):
         output.append(None)
+    # 参考文本
     for _ in datas:
         output.append(_["text"])
     for _ in range(g_batch - len(datas)):
         output.append(None)
+    # 试听音频
     for _ in range(g_batch):
         output.append(None)
-    for _ in range(g_batch):
+    # 满意按钮
+    for _ in datas:
         output.append(
             {
                 "__type__": "update",
@@ -129,6 +161,15 @@ def change_index(index, batch):
                 "interactive": True
             }
         )
+    for _ in range(g_batch - len(datas)):
+        output.append(
+            {
+                "__type__": "update",
+                "value": "满意",
+                "interactive": False
+            }
+        )
+
     return output
 
 
@@ -161,10 +202,10 @@ def generate_test_audio(test_text, language, how_to_cut, top_k, top_p, temp, *wi
     output = []
     for _ in range(g_batch):
         r_audio = g_ref_audio_path_list[_]
-        r_lang = dict_language[language_v1_to_language_v2[widgets[_]]]
-        r_text = widgets[_ + g_batch]
         if r_audio:
             try:
+                r_lang = dict_language[language_v1_to_language_v2[widgets[_]]]
+                r_text = widgets[_ + g_batch]
                 gen_audio = inference_main.get_tts_wav(r_audio, r_text, r_lang, test_text, dict_language[language], dict_how_to_cut[how_to_cut],
                                                        top_k, top_p, temp)
                 sample_rate, array = next(gen_audio)
@@ -182,8 +223,12 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--port', type=int, default=14285, help='Port of webui, default is 14285')
     parser.add_argument('-f', '--folder', type=str, default=None,
                         help='The directory of ref audio, if not specified, abs path in the list file will be used, default is None.')
-    parser.add_argument('-b', '--batch', default=10,
+    parser.add_argument('-b', '--batch', type=int, default=10,
                         help='How many ref audio files will be processed once, default is 10')
+    parser.add_argument('-cd', '--check_duration', action='store_true', default=False,
+                        help='Whether to check if the duration of every ref audio is between 3 and 10 seconds.')
+    parser.add_argument('-r', '--random_order', action='store_true', default=False,
+                        help='Whether to randomize the audio list.')
 
     args = parser.parse_args()
 
@@ -207,6 +252,12 @@ if __name__ == "__main__":
     g_ref_folder, g_batch = args.folder, args.batch
 
     load_ref_list_file(args.list)
+
+    if args.check_duration:
+        remove_noncompliant_audio_from_list()
+
+    if args.random_order:
+        random.shuffle(g_ref_list)
 
     g_SoVITS_names, g_GPT_names = get_weights_names()
 
@@ -266,7 +317,7 @@ if __name__ == "__main__":
             gr.Markdown(value="试听列表")
             with gr.Row():
                 with gr.Column():
-                    for i in range(0, min(g_batch, g_ref_list_max_index)):
+                    for i in range(g_batch):
                         with gr.Row():
                             ref_no = gr.Number(
                                 value=i,
@@ -385,7 +436,8 @@ if __name__ == "__main__":
                     *g_ref_audio_widget_list,
                     *g_ref_lang_widget_list,
                     *g_ref_text_widget_list,
-                    *g_test_audio_widget_list
+                    *g_test_audio_widget_list,
+                    *g_save_widget_list
                 ],
             )
 

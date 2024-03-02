@@ -12,7 +12,7 @@
 ## 🚩 简介
 本项目是一个拥有 WebUI 的 GPT-SoVITS 批量推理器，旨在快速试听多个候选参考音频的推理效果，以筛选出其中效果最令人满意的参考音频。
 
-推理部分源码基于 [RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) 修改，相比原项目删除了推理部分以外的源码。
+推理部分的源码基于 [RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) 修改，Gradio 部分的源码参考了 [cronrpc/SubFix](https://github.com/cronrpc/SubFix) 的写法。
 
 ## 📥 部署
 ### 克隆
@@ -65,13 +65,14 @@ cd GPT-SoVITS-RefAudio-Tester
     可指定的参数:
     - `-l` | `--list`: 参考音频注释列表文件的位置。默认值：`ref.list`
     - `-p` | `--port`: WebUI的监听端口。默认值：14285
-    - `-f` | `--folder`: 参考音频所在目录。**只有在参考音频注释列表中第一列内容为文件名时需要指定，读取的音频文件完整路径=该目录-拼接-list文件里波形对应的文件名。如果不指定则使用.list文件里的绝对全路径。** 默认值：None
+    - `-f` | `--folder`: 参考音频所在目录。**如果参考音频注释列表中第一列内容仅为文件名，或虽为绝对路径，但是音频文件已移动至其他位置，则需要指定该参数。程序会将指定的目录与文件名拼接，作为最终的参考音频文件路径。** 默认值：None
     - `-b` | `--batch`: 每一批最多处理多少个音频。因 Gradio 不支持动态增减控件数量，此值需要预先指定以生成控件，且在运行过程中无法修改。默认值：10
     - `-cd` | `--check_duration`：是否检查音频时长。启用此选项后，在启动时会检查每条音频时长是否在 3~10s 的范围内，若不在则不会加载。若准备的参考音频中均无时长超过范围的，可不开启此项，以缩短启动时间。默认值：不启用
+    - `-r` | `--random_order`：是否乱序参考音频列表。启用此选项后，将会把从文件中读取的参考音频列表打乱顺序。默认值：不启用
 - 在`试听文本`中填入用来测试推理效果的文本，点击`合成试听语音`，即可为当前批次的参考音频生成对应的试听音频。
 - 在`满意的参考音频复制到`中设置目的目录，在点击音频旁的`满意`按钮后，该条参考音频将以`{参考文本}.wav`的文件名复制到该目录。
 
 ## ⚖ 开源声明
-本项目基于 [RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) ，并以 [GNU General Public License v3.0](https://github.com/2DIPW/GPT-SoVITS-RefAudio-Tester/blob/master/LICENSE) 开源
+本项目基于 [RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) 修改，并以 [GNU General Public License v3.0](https://github.com/2DIPW/GPT-SoVITS-RefAudio-Tester/blob/master/LICENSE) 开源
 
 *世界因开源更精彩*
