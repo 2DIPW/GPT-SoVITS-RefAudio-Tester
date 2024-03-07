@@ -107,13 +107,16 @@ def reload_data(index, batch):  # 从index起始，由文件列表中加载一�
     datas = g_ref_list[index:index + batch]
     output = []
     for d in datas:
-        output.append(
-            {
-                "path": d[0],
-                "lang": d[2],
-                "text": d[3]
-            }
-        )
+        try:
+            output.append(
+                {
+                    "path": d[0],
+                    "lang": d[2],
+                    "text": d[3]
+                }
+            )
+        except IndexError:
+            pass
     return output
 
 
