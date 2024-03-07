@@ -71,7 +71,8 @@ def load_ref_list_file(path):  # 加载参考音频列表文件
         g_ref_list = list(reader)
         if g_ref_folder:  # 如果指定了参考文件目录参数，则拼接文件名
             for _ in g_ref_list:
-                _[0] = os.path.join(g_ref_folder, os.path.basename(_[0]))
+                if _:
+                    _[0] = os.path.join(g_ref_folder, os.path.basename(_[0]))
         g_ref_list_max_index = len(g_ref_list) - 1
 
 
