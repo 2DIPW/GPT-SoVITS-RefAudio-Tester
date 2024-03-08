@@ -75,4 +75,6 @@ cd GPT-SoVITS-RefAudio-Tester
 ## ⚖ 开源声明
 本项目基于 [RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) 修改，并以 [GNU General Public License v3.0](https://github.com/2DIPW/GPT-SoVITS-RefAudio-Tester/blob/master/LICENSE) 开源
 
+本项目基于 LGPL 2.1 协议包含一份 FFmpeg 的可执行文件
+
 *世界因开源更精彩*
